@@ -23,6 +23,8 @@ public interface Writable<T> extends AutoCloseable {
      */
     void write(T message) throws IllegalStateException;
 
+    void shallowWrite(T message) throws IllegalStateException;
+
     /**
      * Writes the given message to the destination. If the destination does not have  space, the
      * write blocks until the space is freed up in the destination or the call times out.
@@ -34,6 +36,8 @@ public interface Writable<T> extends AutoCloseable {
      * @throws TimeoutException In case the write does not succeed after the given timeout.
      */
     void write(T message, int timeout, TimeUnit unit) throws TimeoutException;
+
+    void shallowWrite(T message, int timeout, TimeUnit unit) throws TimeoutException;
 
     /**
      * Tries to write a message to the destination. If the destination does not have free space, the

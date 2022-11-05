@@ -108,6 +108,14 @@ public class BufferedChannel<T> implements Channel<T> {
         }
     }
 
+    @Override
+    public void shallowWrite(T message) throws ClosedChannelException, IllegalStateException {
+        try {
+            blockedShallowWrite(message, Optional.empty(), Optional.empty());
+        } catch (TimeoutException ignored) {
+        }
+    }
+
     /**
      * Tries writing a message to the {@link BufferedChannel}, blocking if space is not available
      * for a maximum of the timeout period.
@@ -123,6 +131,11 @@ public class BufferedChannel<T> implements Channel<T> {
     @Override
     public void write(T message, int timeout, TimeUnit unit) throws TimeoutException {
         blockedWrite(message, Optional.of(timeout), Optional.ofNullable(unit));
+    }
+
+    @Override
+    public void shallowWrite(T message, int timeout, TimeUnit unit) throws TimeoutException {
+        blockedShallowWrite(message, Optional.of(timeout), Optional.ofNullable(unit));
     }
 
     /**
@@ -152,28 +165,42 @@ public class BufferedChannel<T> implements Channel<T> {
 
 
     private void blockedWrite(T message, Optional<Integer> timeout, Optional<TimeUnit> unit)
-        throws TimeoutException, CopyException {
+            throws TimeoutException, CopyException {
         Preconditions.checkNotNull(message);
         if (!open) {
             throw new ClosedChannelException("Channel is already closed for writing");
         }
         T messageCopy = this.copier.copyOf(message);
 
+        doWrite(timeout, unit, messageCopy);
+    }
+
+    private void blockedShallowWrite(T message, Optional<Integer> timeout, Optional<TimeUnit> unit)
+            throws TimeoutException, CopyException {
+        Preconditions.checkNotNull(message);
+        if (!open) {
+            throw new ClosedChannelException("Channel is already closed for writing");
+        }
+
+        doWrite(timeout, unit, message);
+    }
+
+    private void doWrite(Optional<Integer> timeout, Optional<TimeUnit> unit, T messageCopy) {
         Thread currThread = Thread.currentThread();
         try {
-            if (internalQueue.offer(message)) {
+            if (internalQueue.offer(messageCopy)) {
                 runAfterWriteActions();
                 return;
             }
             this.blockedWriters.put(currThread.getId(), currThread);
             if (timeout.isPresent()) {
                 boolean success =
-                    internalQueue.offer(message, timeout.get(), unit.orElse(MILLISECONDS));
+                        internalQueue.offer(messageCopy, timeout.get(), unit.orElse(MILLISECONDS));
                 if (!success) {
                     throw new TimeoutException();
                 }
             } else {
-                internalQueue.put(message);
+                internalQueue.put(messageCopy);
             }
             runAfterWriteActions();
         } catch (InterruptedException ex) {
